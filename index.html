@@ -19,8 +19,8 @@
       text-align: center;
       position: relative;
       width: min(420px, 92vw);
-      height: 260px;
-      background: rgba(255, 255, 255, 0.6);
+      height: 280px;
+      background: rgba(255, 255, 255, 0.62);
       backdrop-filter: blur(6px);
       border-radius: 18px;
       padding: 28px 20px;
@@ -56,6 +56,7 @@
       box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
       user-select: none;
       -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
     }
 
     #yes {
@@ -73,10 +74,11 @@
       position: absolute;
       left: 58%;
       top: 0px;
+      will-change: left, top, transform;
     }
 
     .shake {
-      animation: shake 0.24s ease-in-out 0s 2;
+      animation: shake 0.22s ease-in-out 0s 2;
     }
 
     @keyframes shake {
@@ -92,9 +94,23 @@
       margin-top: 16px;
       padding: 14px 16px;
       border-radius: 14px;
-      background: rgba(255, 255, 255, 0.85);
+      background: rgba(255, 255, 255, 0.88);
       border: 1px solid rgba(255, 59, 107, 0.2);
       font-size: 18px;
+      line-height: 1.25;
+    }
+
+    .sticker {
+      display: none;
+      font-size: 72px;
+      margin-top: 8px;
+      animation: pop 0.4s ease-out;
+      filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.12));
+    }
+
+    @keyframes pop {
+      0% { transform: scale(0.4) rotate(-8deg); opacity: 0; }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
     }
 
     canvas#confetti {
@@ -119,6 +135,8 @@
     <div class="message" id="msg">
       Yessss! 😭💘 I knew it. Youre in love with me eh, ha.
     </div>
+
+    <div class="sticker" id="sticker">💘</div>
   </div>
 
   <script>
@@ -126,24 +144,39 @@
     const yesButton = document.getElementById("yes");
     const btnRow = document.getElementById("btnRow");
     const msg = document.getElementById("msg");
+    const sticker = document.getElementById("sticker");
+    const container = document.querySelector(".container");
 
     let attempts = 0;
     let isMoving = false;
+    let chaosAngle = 0;
 
     function clamp(n, min, max) {
       return Math.max(min, Math.min(max, n));
     }
 
+    // Teleport inside the whole card (container), not just near the buttons
     function teleportNo() {
-      const rowRect = btnRow.getBoundingClientRect();
-      const maxX = rowRect.width - noButton.offsetWidth;
-      const maxY = rowRect.height - noButton.offsetHeight;
+      const padding = 12;
 
-      const x = Math.random() * clamp(maxX, 0, maxX);
-      const y = Math.random() * clamp(maxY, 0, maxY);
+      const maxX = container.clientWidth - noButton.offsetWidth - padding * 2;
+      const maxY = container.clientHeight - noButton.offsetHeight - padding * 2;
+
+      const x = padding + Math.random() * Math.max(0, maxX);
+      const y = padding + Math.random() * Math.max(0, maxY);
 
       noButton.style.left = `${x}px`;
       noButton.style.top = `${y}px`;
+    }
+
+    function chaosText() {
+      const options = ["No", "NOPE", "Nah", "Try again 😇", "Not today", "Stop 😭"];
+      // 40% chance to change the label
+      if (Math.random() < 0.4) {
+        noButton.textContent = options[(Math.random() * options.length) | 0];
+      } else {
+        noButton.textContent = "No";
+      }
     }
 
     function shakeThenTeleport() {
@@ -152,21 +185,37 @@
 
       attempts += 1;
 
-      const baseDelay = 140;
-      const minDelay = 30;
-      const delay = Math.max(minDelay, baseDelay - attempts * 18);
+      // Harder each attempt: shrink + faster reaction
+      const scale = Math.max(0.55, 1 - attempts * 0.06);
 
+      // Add slight chaos rotation (cute + evil)
+      chaosAngle += (Math.random() * 16 - 8);
+      chaosAngle = clamp(chaosAngle, -18, 18);
+
+      // Delay gets shorter each attempt (teleports faster)
+      const baseDelay = 140;
+      const minDelay = 20;
+      const delay = Math.max(minDelay, baseDelay - attempts * 28);
+
+      // Shake
       noButton.classList.remove("shake");
       void noButton.offsetWidth;
       noButton.classList.add("shake");
 
       setTimeout(() => {
         teleportNo();
+        chaosText();
+
+        // Apply shrink + rotate after teleport
+        noButton.style.transform = `scale(${scale}) rotate(${chaosAngle}deg)`;
+
         isMoving = false;
       }, delay);
     }
 
+    // Run-away triggers (desktop + mobile)
     noButton.addEventListener("mouseenter", shakeThenTeleport);
+    noButton.addEventListener("mousemove", shakeThenTeleport);
 
     noButton.addEventListener(
       "touchstart",
@@ -177,14 +226,19 @@
       { passive: false }
     );
 
+    // Initialize
     teleportNo();
+    noButton.style.transform = "scale(1) rotate(0deg)";
 
+    // YES: show message + sticker + confetti + hide buttons
     yesButton.addEventListener("click", () => {
       btnRow.style.display = "none";
       msg.style.display = "block";
+      sticker.style.display = "block";
       burstConfetti();
     });
 
+    // --- Minimal confetti (no libraries) ---
     const canvas = document.getElementById("confetti");
     const ctx = canvas.getContext("2d");
     let confettiPieces = [];
@@ -210,13 +264,13 @@
         rot: Math.random() * Math.PI,
         vr: -0.15 + Math.random() * 0.3,
         color: colors[(Math.random() * colors.length) | 0],
-        life: 120 + ((Math.random() * 60) | 0),
+        life: 140 + ((Math.random() * 80) | 0),
       };
     }
 
     function burstConfetti() {
       confettiPieces = [];
-      for (let i = 0; i < 180; i++) confettiPieces.push(makePiece());
+      for (let i = 0; i < 220; i++) confettiPieces.push(makePiece());
 
       if (animId) cancelAnimationFrame(animId);
       animateConfetti();
